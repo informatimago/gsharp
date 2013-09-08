@@ -6,19 +6,19 @@
   `(progn
     #+mk-defsystem
     (mk:defsystem ,module
-	:source-pathname *gsharp-directory*
-	,@(and depends-on `(:depends-on ,depends-on))
-	:components (:serial ,@components))
+        :source-pathname *gsharp-directory*
+        ,@(and depends-on `(:depends-on ,depends-on))
+        :components (:serial ,@components))
     #+asdf
     (asdf:defsystem ,module
-	,@(and depends-on `(:depends-on ,depends-on))
-	:serial t
-	:components (,@(loop for c in components
-			     for p = (merge-pathnames
-				      (parse-namestring c)
-				      (make-pathname :type "lisp"
-						     :defaults *gsharp-directory*))
-			     collect `(:file ,(pathname-name p) :pathname ,p))))))
+        ,@(and depends-on `(:depends-on ,depends-on))
+        :serial t
+        :components (,@(loop for c in components
+                             for p = (merge-pathnames
+                                      (parse-namestring c)
+                                      (make-pathname :type "lisp"
+                                                     :defaults *gsharp-directory*))
+                             collect `(:file ,(pathname-name p) :pathname ,p))))))
 
 (gsharp-defsystem (:gsharp :depends-on (:mcclim :clim-listener :flexichain :midi :puri :cxml))
    "packages"
