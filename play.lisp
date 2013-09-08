@@ -112,7 +112,11 @@
     (ext:run-program *midi-player*
                      :arguments (append *midi-player-arguments*
                                         (list *midi-temp-file*)))
-    #-(or cmu sbcl clisp)
+    #+ccl
+    (ccl:run-program *midi-player* (append *midi-player-arguments*
+                                           (list *midi-temp-file*))
+                     :wait nil)
+    #-(or cmu sbcl clisp ccl)
     (error "write compatibility layer for RUN-PROGRAM")))
 
 (defun play-layer (layer)
