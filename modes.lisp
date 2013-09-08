@@ -30,8 +30,8 @@
 (set-key 'com-beginning-of-score 'global-gsharp-table '((#\< :meta)))
 
 ;;; FIXME where are the corresponding commands?
-(set-key 'com-left 'global-gsharp-table '((#\l :meta)))
-(set-key 'com-right 'global-gsharp-table '((#\r :meta)))
+;; (set-key 'com-left  'global-gsharp-table '((#\l :meta)))
+;; (set-key 'com-right 'global-gsharp-table '((#\r :meta)))
 
 ;; Post MS file-io keystrokes
 (set-key 'com-load-score-file 'global-gsharp-table '((#\o :meta)))
