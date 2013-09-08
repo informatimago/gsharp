@@ -346,7 +346,7 @@
 (defun gui-get-pathname (&key initial-path extensions)
   ;; clunky way of getting default values into gadgets
   (unless initial-path
-    (setf initial-path (directory-of-current-buffer)))
+    (setf initial-path (esa-io::directory-of-current-buffer)))
   (let* ((filespec (make-filespec :pathname ""))
          (frame (make-application-frame-with-gadgets
                  'file-browser 
@@ -356,3 +356,4 @@
                                    :extensions extensions))))
     (run-frame-top-level frame)
     (filespec-pathname filespec)))
+
