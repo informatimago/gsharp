@@ -1,7 +1,8 @@
 (in-package :gsharp-buffer)
 
-(defparameter *gsharp-readtable-v3* (copy-readtable))
-(defparameter *gsharp-readtable-v4* (copy-readtable))
+
+(defparameter *gsharp-readtable-v3* (copy-readtable nil)) ; either get a standard readtable or be
+(defparameter *gsharp-readtable-v4* (copy-readtable nil)) ; prepared to remove colliding reader macros!
 
 (defun read-gsharp-object-v4 (stream char)
   (declare (ignore char))
@@ -24,7 +25,8 @@
                                :test #'eq)))
                (format stream "~_~W ~W "
                        (car (clim-mop:slot-definition-initargs slot))
-                       (slot-value object (clim-mop:slot-definition-name slot)))))))
+                       (when (slot-boundp  object (clim-mop:slot-definition-name slot))
+                 (slot-value object (clim-mop:slot-definition-name slot))))))))
 
 (defclass gsharp-object () ())
 
