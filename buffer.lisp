@@ -20,20 +20,20 @@
   (pprint-logical-block (stream nil :prefix "[" :suffix "]")
     (format stream "~s ~2i" (class-name (class-of object)))
     (loop for slot-name in (slots-to-be-saved object)
-          do (let ((slot (find slot-name (clim-mop:class-slots (class-of object))
-                               :key #'clim-mop:slot-definition-name
-                               :test #'eq)))
-               (format stream "~_~W ~W "
-                       (car (clim-mop:slot-definition-initargs slot))
-                       (when (slot-boundp  object (clim-mop:slot-definition-name slot))
-                 (slot-value object (clim-mop:slot-definition-name slot))))))))
+       do (let ((slot (find slot-name (clim-mop:class-slots (class-of object))
+                            :key #'clim-mop:slot-definition-name
+                            :test #'eq)))
+            (format stream "~_~W ~W "
+                    (car (clim-mop:slot-definition-initargs slot))
+                    (when (slot-boundp  object (clim-mop:slot-definition-name slot))
+                      (slot-value object (clim-mop:slot-definition-name slot))))))))
 
 (defclass gsharp-object () ())
 
 (defmethod print-object ((obj gsharp-object) stream)
   (if *print-circle*
-      (save-object obj stream)
-      (print-unreadable-object (obj stream :type t :identity t))))
+    (save-object obj stream)
+    (print-unreadable-object (obj stream :type t :identity t))))
 
 (define-condition gsharp-condition (error) ())
 
@@ -104,7 +104,7 @@
    (rbeams :initform 0 :initarg :rbeams :accessor rbeams)
    (lbeams :initform 0 :initarg :lbeams :accessor lbeams)
    (dots :initform 0 :initarg :dots :accessor dots)))
-   
+
 (defmethod slots-to-be-saved append ((e rhythmic-element))
   '(notehead rbeams lbeams dots))
 
@@ -159,7 +159,7 @@
 (defmethod initialize-instance :after ((b bar) &rest args)
   (declare (ignore args))
   (loop for element in (elements b)
-        do (setf (bar element) b)))
+     do (setf (bar element) b)))
 
 (defmethod slots-to-be-saved append ((b bar))
   '(elements))
@@ -184,7 +184,7 @@
 (define-condition element-already-in-bar (gsharp-condition) ()
   (:report
    (lambda (condition stream)
-     (declare (ignore condition))
+       (declare (ignore condition))
      (format stream "Attempt to add an element already in a bar"))))
 
 (defmethod add-element ((element element) (b bar) position)
@@ -217,15 +217,15 @@
             ;; there might be more than one key signature in the bar,
             ;; and they might have changed their relative order as a
             ;; result of the edit.
-        (sort-staffwise-elements staff)))))))
- 
+            (sort-staffwise-elements staff)))))))
+
 (defmethod add-element :after ((element element) (bar bar) position)
   (maybe-update-key-signatures bar))
- 
+
 (define-condition element-not-in-bar (gsharp-condition) ()
   (:report
    (lambda (condition stream)
-     (declare (ignore condition))
+       (declare (ignore condition))
      (format stream "Attempt to delete an element not in a bar"))))
 
 (defmethod remove-element ((element element) (b bar))
@@ -267,7 +267,7 @@
 (defmethod initialize-instance :after ((s slice) &rest args)
   (declare (ignore args))
   (loop for bar in (bars s)
-        do (setf (slice bar) s)))
+     do (setf (slice bar) s)))
 
 (defun make-slice (&rest args &key bars)
   (declare (type list bars)
@@ -294,7 +294,7 @@
 (define-condition bar-already-in-slice (gsharp-condition) ()
   (:report
    (lambda (condition stream)
-     (declare (ignore condition))
+       (declare (ignore condition))
      (format stream "Attempt to add a bar already in a slice"))))
 
 (defmethod add-bar ((bar bar) (s slice) position)
@@ -307,7 +307,7 @@
 (define-condition bar-not-in-slice (gsharp-condition) ()
   (:report
    (lambda (condition stream)
-     (declare (ignore condition))
+       (declare (ignore condition))
      (format stream "Attempt to delete a bar not in a slice"))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -384,19 +384,19 @@
 (define-condition staff-already-in-layer (gsharp-condition) ()
   (:report
    (lambda (condition stream)
-     (declare (ignore condition))
+       (declare (ignore condition))
      (format stream "That staff is already in the layer"))))
 
 (define-condition staff-not-in-layer (gsharp-condition) ()
   (:report
    (lambda (condition stream)
-     (declare (ignore condition))
+       (declare (ignore condition))
      (format stream "That staff is not in the layer"))))
 
 (define-condition only-staff-in-layer (gsharp-condition) ()
   (:report
    (lambda (condition stream)
-     (declare (ignore condition))
+       (declare (ignore condition))
      (format stream "Only staff in the layer"))))
 
 (defmethod add-staff-to-layer ((staff staff) (layer layer))
@@ -455,7 +455,7 @@
       (assert (not (null staff)))
       (push (make-layer (list staff)) layers))
     (loop for layer in layers
-          do (setf (segment layer) s))))
+       do (setf (segment layer) s))))
 
 (defmethod slots-to-be-saved append ((s segment))
   '(layers tempo tuning))
@@ -477,20 +477,20 @@
 (define-condition layer-already-in-a-segment (gsharp-condition) ()
   (:report
    (lambda (condition stream)
-     (declare (ignore condition))
+       (declare (ignore condition))
      (format stream "Attempt to add a layer already in a segment"))))
 
 (defmethod add-layer ((layer layer) (seg segment))
   (with-slots (segment) layer
     (assert (not segment) () 'layer-already-in-a-segment)
     (with-slots (layers) seg
-       (push layer layers))
+      (push layer layers))
     (setf segment seg)))
 
 (define-condition layer-not-in-segment (gsharp-condition) ()
   (:report
    (lambda (condition stream)
-     (declare (ignore condition))
+       (declare (ignore condition))
      (format stream "Attempt to delete a layer which is not in a segment"))))
 
 (defmethod remove-layer ((layer layer))
@@ -582,12 +582,12 @@
 
 (defun add-new-selection (element-list buffer)
   (dolist (selection (buffer-forward-selection buffer)
-           (push element-list (buffer-back-selection buffer)))
+                     (push element-list (buffer-back-selection buffer)))
     (push selection (buffer-back-selection buffer))))
 
 (defun set-buffer-of-staves (buffer)
   (loop for staff in (staves buffer)
-        do (setf (buffer staff) buffer)))
+     do (setf (buffer staff) buffer)))
 
 (defmethod (setf staves) :after (staves (buffer buffer))
   (declare (ignore staves))
@@ -600,7 +600,7 @@
     (when (null segments)
       (add-segment (make-instance 'segment :staff (car (staves b))) b 0))
     (loop for segment in segments
-          do (setf (buffer segment) b))))
+       do (setf (buffer segment) b))))
 
 (defmethod slots-to-be-saved append ((b buffer))
   '(min-width spacing-style right-edge left-offset left-margin staves segments))
@@ -623,7 +623,7 @@
   ()
   (:report
    (lambda (condition stream)
-     (declare (ignore condition))
+       (declare (ignore condition))
      (format stream "Attempt to add a segment already in some buffer"))))
 
 (defmethod add-segment ((segment segment) (buf buffer) position)
@@ -637,7 +637,7 @@
   ()
   (:report
    (lambda (condition stream)
-     (declare (ignore condition))
+       (declare (ignore condition))
      (format stream "Attempt to delete a segment which is not in a buffer"))))
 
 (defmethod remove-segment ((segment segment))
@@ -653,13 +653,13 @@
 (define-condition staff-already-in-buffer (gsharp-condition) ()
   (:report
    (lambda (condition stream)
-     (declare (ignore condition))
+       (declare (ignore condition))
      (format stream "A staff with that name is already in the buffer"))))
 
 (define-condition staff-not-in-buffer (gsharp-condition) ()
   (:report
    (lambda (condition stream)
-     (declare (ignore condition))
+       (declare (ignore condition))
      (format stream "No staff with that name in the buffer"))))
 
 (defmethod find-staff (staff-name (buffer buffer) &optional (errorp t))
@@ -670,24 +670,24 @@
 (defun add-staff-before (newstaff staff staves)
   (assert (not (null staves)))
   (if (eq staff (car staves))
-      (cons newstaff staves)
-      (cons (car staves) (add-staff-before newstaff staff (cdr staves)))))
+    (cons newstaff staves)
+    (cons (car staves) (add-staff-before newstaff staff (cdr staves)))))
 
 (defmethod add-staff-before-staff (staff newstaff (buffer buffer))
   (setf (staves buffer)
         (add-staff-before newstaff staff (staves buffer))))
-  
+
 (defun add-staff-after (newstaff staff staves)
   (assert (not (null staves)))  
   (if (eq staff (car staves))
-      (push newstaff (cdr staves))
-      (add-staff-after newstaff staff (cdr staves)))
+    (push newstaff (cdr staves))
+    (add-staff-after newstaff staff (cdr staves)))
   staves)
 
 (defmethod add-staff-after-staff (staff newstaff (buffer buffer))
   (setf (staves buffer)
         (add-staff-after newstaff staff (staves buffer))))
-  
+
 (defmethod rename-staff (staff-name (staff staff) (buffer buffer))
   (assert (not (find-staff staff-name buffer nil)) () 'staff-already-in-buffer)
   (setf (name staff) staff-name))
@@ -695,14 +695,14 @@
 (define-condition staff-in-use (gsharp-condition) ()
   (:report
    (lambda (condition stream)
-     (declare (ignore condition))
+       (declare (ignore condition))
      (format stream "Staff in use"))))
 
 (defmethod remove-staff-from-buffer (staff (buffer buffer))
   (assert (notany (lambda (segment)
-                    (some (lambda (layer)
-                            (member staff (staves layer)))
-                          (layers segment)))
+                      (some (lambda (layer)
+                                (member staff (staves layer)))
+                       (layers segment)))
                   (segments buffer))
           () 'staff-in-use)
   (setf (staves buffer)
@@ -715,13 +715,13 @@
 (define-condition file-does-not-exist (gsharp-condition) ()
   (:report
    (lambda (condition stream)
-     (declare (ignore condition))
+       (declare (ignore condition))
      (format stream "File does not exist"))))
 
 (define-condition unknown-file-version (gsharp-condition) ()
   (:report
    (lambda (condition stream)
-     (declare (ignore condition))
+       (declare (ignore condition))
      (format stream "Unknown file version"))))
 
 (defparameter *readtables*

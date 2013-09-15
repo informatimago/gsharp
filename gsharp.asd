@@ -43,5 +43,6 @@
    "gui"
    "undo"
    "fontview"
-   #+sbcl "Mxml/mxml"
-   #+sbcl "Mxml/commands")
+   #-sbcl "Mxml/sequence"
+   "Mxml/mxml"
+   "Mxml/commands")

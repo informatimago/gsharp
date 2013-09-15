@@ -8,7 +8,7 @@
 ;;; The bottom line of the staff is number 1. 
 (defgeneric lineno (clef))
 
-;;; for key signature drawing calcluations.  FIXME: in fact the layout
+;;; for key signature drawing calculations.  FIXME: in fact the layout
 ;;; of key signatures isn't the same across all clefs.
 (defgeneric b-position (clef))
 (defgeneric f-position (clef))

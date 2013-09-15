@@ -653,16 +653,24 @@
   (declare (ignore new-process process-name width height))
   (apply #'gsharp-common `(esa-io::com-find-file ,filename) args))
 
+
+(defvar *gsharp-instances* '()
+  "A list of current running gsharp *application-frame*.")
+
 (defun gsharp-common (command &key new-process (process-name "Gsharp") width height)
   (let* ((frame (make-application-frame 'gsharp :width width :height height))
          (*application-frame* frame)
          (*esa-instance* frame))
-    (adopt-frame (find-frame-manager) *application-frame*)
-    (execute-frame-command *application-frame* command)
-    (flet ((run () (run-frame-top-level frame)))
-      (if new-process
-          (clim-sys:make-process #'run :name process-name)
-          (run)))))
+    (unwind-protect
+        (progn
+          (push frame *gsharp-instances*)
+          (adopt-frame (find-frame-manager) *application-frame*)
+          (execute-frame-command *application-frame* command)
+          (flet ((run () (run-frame-top-level frame)))
+            (if new-process
+              (clim-sys:make-process #'run :name process-name)
+              (run))))
+      (setf *gsharp-instances* (delete frame *gsharp-instances*)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;
