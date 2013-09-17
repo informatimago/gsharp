@@ -146,7 +146,7 @@
   (let* ((time 0)
          (num-tracks (loop :for segment :in (segments buffer)
                            :maximize (length (layers segment))))
-         (tracks (loop :for i :from 0 :below num-tracks :collect nil)))
+         (tracks (make-list num-tracks)))
 
     ; Collect snippets from each segment that should go to different tracks
     (dolist (segment (segments buffer))
