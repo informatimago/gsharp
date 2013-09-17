@@ -661,16 +661,17 @@
   (let* ((frame (make-application-frame 'gsharp :width width :height height))
          (*application-frame* frame)
          (*esa-instance* frame))
-    (unwind-protect
-        (progn
+    (progn
           (push frame *gsharp-instances*)
           (adopt-frame (find-frame-manager) *application-frame*)
           (execute-frame-command *application-frame* command)
-          (flet ((run () (run-frame-top-level frame)))
+          (flet ((run ()
+                   (unwind-protect
+                       (run-frame-top-level frame)
+                     (setf *gsharp-instances* (delete frame *gsharp-instances*)))))
             (if new-process
               (clim-sys:make-process #'run :name process-name)
-              (run))))
-      (setf *gsharp-instances* (delete frame *gsharp-instances*)))))
+              (run))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;
