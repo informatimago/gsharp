@@ -1729,7 +1729,9 @@ Prints the results in the minibuffer."
 ;;; I/O
 
 (defmethod frame-make-buffer-from-stream ((frame gsharp) stream)
-  (read-buffer-from-stream stream))
+  (if (midi-stream-p stream)
+      (read-buffer-from-midi-stream stream)
+      (read-buffer-from-stream stream)))
 
 (defmethod frame-make-new-buffer ((frame gsharp) &key &allow-other-keys)
   (make-instance 'buffer))

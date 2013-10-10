@@ -187,6 +187,12 @@
            #:play-segment
            #:play-buffer))
 
+(defpackage :gsharp-midi-load
+  (:use :common-lisp :midi :gsharp-buffer)
+  (:shadowing-import-from :gsharp-buffer #:rest)
+  (:export #:midi-stream-p
+           #:read-buffer-from-midi-stream))
+
 (defpackage :gsharp-mxml
   (:use :cl :gsharp-buffer :gsharp-measure)
   (:shadowing-import-from :gsharp-buffer #:rest))
@@ -195,7 +201,7 @@
   (:use :clim :clim-lisp :gsharp-utilities :esa :esa-buffer :esa-io
         :gsharp-buffer :gsharp-cursor :gsharp-drawing :gsharp-numbering
         :gsharp-measure :sdl :midi
-        :gsharp-play)
+        :gsharp-play :gsharp-midi-load)
   (:shadowing-import-from :gsharp-numbering #:number)
   (:shadowing-import-from :gsharp-buffer #:rest #:buffer)
   (:export #:gsharp #:edit-file))
