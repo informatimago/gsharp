@@ -1632,7 +1632,9 @@ Prints the results in the minibuffer."
                                     (lambda (so-far mode)
                                       (complete-from-possibilities
                                        so-far
-                                       '(:treble :treble8 :bass :c :percussion)
+                                       '(:treble8va :treble :treble8vb
+                                         :bass8va   :bass   :bass8vb
+                                         :c :percussion)
                                        '()
                                        :action mode
                                        :predicate (constantly t)

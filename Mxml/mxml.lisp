@@ -406,23 +406,27 @@ specified, returns the first (hopefully default) staff."
 
 (defun parse-mxml-clef (clef)
   "Takes dom element for clef and returns a clef object"
-  (let ((name (stringcase (named-pcdata clef "sign")
-                          ("G" (if (string= (named-pcdata clef "clef-octave-change")
-                                            "-1")
-                                   :treble8
-                                   :treble))
-                          ("F" :bass)
-                          ("C" :c)
-                          ("percussion" :percussion)
-                          ;; "TAB" and "none" are the other, unsupported choices,
-                          ;; along with other octave shifts.
-                          (t  :c)))
-        (lineno (if (has-element-type clef "line")
-                    (* 2 (1- (parse-integer (named-pcdata clef "line"))))
-                    nil))
-        (staff-number (if (dom:has-attribute clef "number")
-                          (1- (parse-integer (dom:get-attribute clef "number")))
-                          0)))
+  (let* ((octave-change (ignore-errors (parse-integer (named-pcdata clef "clef-octave-change"))))
+         (name (stringcase (named-pcdata clef "sign")
+                           ("G" (case octave-change
+                                  ((+1)      :treble8va)
+                                  ((-1)      :treble8vb)
+                                  (otherwise :treble)))
+                           ("F" (case octave-change
+                                  ((+1)      :bass8va)
+                                  ((-1)      :bass8vb)
+                                  (otherwise :bass)))
+                           ("C" :c)
+                           ("percussion" :percussion)
+                           ;; "TAB" and "none" are the other, unsupported choices,
+                           ;; along with other octave shifts.
+                           (t  :c)))
+         (lineno (if (has-element-type clef "line")
+                     (* 2 (1- (parse-integer (named-pcdata clef "line"))))
+                     nil))
+         (staff-number (if (dom:has-attribute clef "number")
+                           (1- (parse-integer (dom:get-attribute clef "number")))
+                           0)))
     (values (make-clef name :lineno lineno) staff-number)))
 
 (defun parse-mxml-time (time staves)
@@ -1051,7 +1055,7 @@ dotted 16th note will return 8."
               (cxml:with-element "key"
                 (alterations-to-fifths
                  (alterations (keysig staff)))))
-                   
+            
             (when (> staves-length 1)
               (cxml:with-element "staves"
                 (cxml:text (write-to-string staves-length))))
@@ -1060,11 +1064,10 @@ dotted 16th note will return 8."
                ;; possibilities for MusicXML:
                ;; G, F, C, percussion, TAB, and none
                for clef-sign = (case (name clef)
-                                 (:treble "G")
-                                 (:treble8 "G")
-                                 (:bass "F")
-                                 (:c "C")
-                                 (:percussion "percussion"))
+                                 ((:treble8va :treble :treble8vb) "G")
+                                 ((:bass8va   :bass   :bass8vb)   "F")
+                                 ((:c)                            "C")
+                                 ((:percussion)                   "percussion"))
                for clef-line = (1+ (/ (lineno clef) 2))
                for staff-num = (gethash staff *staff-hash*)
                do
@@ -1075,9 +1078,13 @@ dotted 16th note will return 8."
                      (cxml:text clef-sign))
                    (cxml:with-element "line"
                      (cxml:text (write-to-string clef-line)))
-                   (when (eq (name clef) :treble8)
-                     (cxml:with-element "clef-octave-change"                    
-                       (cxml:text "-1"))))))))
+                   (cond
+                     ((member (name clef) '(:treble8va :bass8va))
+                      (cxml:with-element "clef-octave-change"                    
+                        (cxml:text "1")))
+                     ((member (name clef) '(:treble8vb :bass8vb))
+                      (cxml:with-element "clef-octave-change"                    
+                        (cxml:text "-1")))))))))
 
     ;; process each bar, backing up only if there's a "next" bar
     (loop for voice from 1

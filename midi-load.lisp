@@ -24,10 +24,28 @@
 
 
 (defun read-buffer-from-midi-stream (stream)
-  (let ((file (midi-stream-p stream))
-        (buffer ))
-    
-    ))
+  (let ((file     (midi-stream-p stream))
+        (buffer   (make-instance 'buffer
+                      :min-width 12
+                      :spacing-style 1.0
+                      :right-edge 700
+                      :left-offset 30
+                      :left-margin 20))
+        (staves   (list (make-fiveline-staff :name
+                                             :clef (make-clef :treble)
+                                             :keysig)
+                        (make-fiveline-staff :name
+                                             :clef (make-clef :treble)
+                                             :keysig)
+                        (make-fiveline-staff :name
+                                             :clef (make-clef :treble)
+                                             :keysig)))
+        (segments ))
+    (setf (staves   buffer) staves
+          (segments buffer) segments
+          (filepath buffer) (pathname stream)
+          (needs-saving buffer) t)
+    buffer))
 
 
 

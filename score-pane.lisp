@@ -154,14 +154,17 @@
   (sdl::draw-shape stream *font* 
                    (ecase name
                      ;; FIXME: while using the same glyph for :TREBLE
-                     ;; and :TREBLE8 is fine from a musical point of
+                     ;; and :TREBLE8vb is fine from a musical point of
                      ;; view, some differentiation (by putting an
                      ;; italic 8 underneath, for instance) would be
                      ;; good.
-                     ((:treble :treble8) :g-clef)
-                     (:bass :f-clef)
-                     (:c :c-clef))
-                   x (staff-step (- staff-step))))
+                     ((:treble8va :treble :treble8vb) :g-clef)
+                     ((:bass8va   :bass   :bass8vb)   :f-clef)
+                     ((:c)                            :c-clef))
+                   x (staff-step (- staff-step)))
+  (case name ;; FIXME
+    ((:treble8va :bass8va)    #|draw 8 above|#)
+    ((:treble8vb :bass8vb)  #|draw 8 below|#)))
                        
 (define-presentation-type clef () :options (name x staff-step))
 

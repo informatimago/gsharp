@@ -37,6 +37,7 @@
    "drawing"
    "cursor"
    "input-state"
+   "midi-load"
    "modes"
    "play"
    "clim-utils"
