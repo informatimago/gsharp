@@ -21,16 +21,19 @@
            :type (or (integer 0 8) null))))
 
 (defun make-clef (name &key lineno)
-  (declare (type (member :treble :treble8 :bass :c :percussion) name)
-           (type (or (integer 0 8) null) lineno))
-  (when (null lineno)
-    (setf lineno
-          (ecase name
-            ((:treble :treble8) 2)
-            (:bass 6)
-            (:c 4)
-            (:percussion 3))))
-  (make-instance 'clef :name name :lineno lineno))
+  (check-type name (member :treble8 :treble :treble8vb :bass8 :bass :bass8vb :c :percussion))
+  (check-type lineno (or (integer 0 8) null))
+  (locally
+      (declare (type (member :treble8 :treble :treble8vb :bass8 :bass :bass8vb :c :percussion) name)
+               (type (or (integer 0 8) null) lineno))
+    (when (null lineno)
+      (setf lineno
+            (ecase name
+              ((:treble8 :treble :treble8vb) 2)
+              ((:bass8   :bass   :bass8vb)   6)
+              ((:c)                          4)
+              ((:percussion)                 3))))
+    (make-instance 'clef :name name :lineno lineno)))
 
 (defmethod slots-to-be-saved append ((c clef))
   '(lineno))
@@ -47,25 +50,26 @@
 ;;; the first flat sign in key signatures with flats
 (defmethod b-position ((clef clef))
   (ecase (name clef)
-    (:bass (- (lineno clef) 4))
-    ((:treble :treble8) (+ (lineno clef) 2))
-    (:c (- (lineno clef) 1))))
+    ((:treble8 :treble :treble8vb) (+ (lineno clef) 2))
+    ((:bass8   :bass   :bass8vb)   (- (lineno clef) 4))
+    ((:c)                          (- (lineno clef) 1))))
 
 
 ;;; given a clef, return the staff step of the F that should have
 ;;; the first sharp sign in key signatures with sharps
 (defmethod f-position ((clef clef))
   (ecase (name clef)
-    (:bass (lineno clef))
-    ((:treble :treble8) (+ (lineno clef) 6))
-    (:c (+ (lineno clef) 3))))
+    ((:treble8 :treble :treble8vb) (+ (lineno clef) 6))
+    ((:bass8   :bass   :bass8vb)   (lineno clef))
+    ((:c)                          (+ (lineno clef) 3))))
 
 (defmethod bottom-line ((clef clef))
   (- (ecase (name clef)
-       (:treble 32)
-       (:bass 24)
-       (:c 28)
-       (:treble8 25))
+       (:treble  32)
+       (:treble8 25)
+       (:bass    24)
+       (:c       28)
+       )
      (lineno clef)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -176,17 +180,23 @@
    (%tie-right :initform nil :initarg :tie-right :accessor tie-right)
    (%tie-left :initform nil :initarg :tie-left :accessor tie-left)))
 
+
 (defun make-note (pitch staff &rest args &key head (accidentals :natural) dots)
-  (declare (type (integer 0 127) pitch)
-           (type staff staff)
-           (type (or (member :long :breve :whole :half :filled) null) head)
-           ;; FIXME: :TYPE ACCIDENTAL
-           #+nil #+nil
-           (type (member :natural :flat :double-flat :sharp :double-sharp)
-                 accidentals)
-           (type (or (integer 0 3) null) dots)
-           (ignore head accidentals dots))
-  (apply #'make-instance 'note :pitch pitch :staff staff args))
+  (check-type pitch (integer 0 127))
+  (check-type staff staff)
+  (check-type head (or (member :long :breve :whole :half :filled) null))
+  #-(and) (check-type accidentals (member :natural :flat :double-flat :sharp :double-sharp))
+  (check-type dots (or (integer 0 3) null))
+  (locally
+      (declare (type (integer 0 127) pitch)
+               (type staff staff)
+               (type (or (member :long :breve :whole :half :filled) null) head)
+               ;; FIXME: :TYPE ACCIDENTAL
+               #+nil #+nil
+               (type (member :natural :flat :double-flat :sharp :double-sharp)
+                     accidentals)
+               (type (or (integer 0 3) null) dots))
+    (apply #'make-instance 'note :pitch pitch :staff staff args)))
 
 (defmethod slots-to-be-saved append ((n note))
   '(pitch staff head accidentals dots %tie-right %tie-left))
@@ -333,9 +343,10 @@ flatter by removing some sharps and/or adding some flats"))
                  :initarg :alterations :reader alterations)))
 
 (defun make-key-signature (staff &rest args &key alterations)
-  (declare (type (or null (simple-vector 7)) alterations)
-           (ignore alterations))
-  (apply #'make-instance 'key-signature :staff staff args))
+  (check-type alterations (or null (simple-vector 7)))
+  (locally
+      (declare (type (or null (simple-vector 7)) alterations))
+    (apply #'make-instance 'key-signature :staff staff args)))
 
 (defmethod slots-to-be-saved append ((k key-signature))
   '(%alterations))
@@ -424,15 +435,23 @@ flatter by removing some sharps and/or adding some flats"))
 (defun make-cluster (&rest args
                      &key (notehead :filled) (lbeams 0) (rbeams 0) (dots 0)
                      (xoffset 0) notes (stem-direction :auto))
-  (declare (type (member :long :breve :whole :half :filled) notehead)
-           (type (integer 0 5) lbeams)
-           (type (integer 0 5) rbeams)
-           (type (integer 0 3) dots)
-           (type number xoffset)
-           (type list notes)
-           (type (member :up :down :auto) stem-direction)
-           (ignore notehead lbeams rbeams dots xoffset notes stem-direction))
-  (apply #'make-instance 'cluster args))
+  (check-type notehead (member :long :breve :whole :half :filled))
+  (check-type lbeams (integer 0 5))
+  (check-type rbeams (integer 0 5))
+  (check-type dots (integer 0 3))
+  (check-type xoffset number)
+  (check-type notes list)
+  (check-type stem-direction (member :up :down :auto))
+  (locally
+      (declare
+       (type (member :long :breve :whole :half :filled) notehead)
+       (type (integer 0 5) lbeams)
+       (type (integer 0 5) rbeams)
+       (type (integer 0 3) dots)
+       (type number xoffset)
+       (type list notes)
+       (type (member :up :down :auto) stem-direction))
+    (apply #'make-instance 'cluster args)))
 
 (defmethod slots-to-be-saved append ((c cluster))
   '(stem-direction notes))
@@ -506,16 +525,23 @@ flatter by removing some sharps and/or adding some flats"))
 (defun make-rest (staff &rest args
                   &key (staff-pos 4) (notehead :filled) (lbeams 0) (rbeams 0)
                   (dots 0) (xoffset 0))
-  (declare (type staff staff)
-           (type integer staff-pos)
-           (type (member :long :breve :whole :half :filled) notehead)
-           (type (integer 0 5) lbeams)
-           (type (integer 0 5) rbeams)
-           (type (integer 0 3) dots)
-           (type number xoffset)
-           (ignore staff-pos notehead lbeams rbeams dots xoffset))
-  (apply #'make-instance 'rest
-         :staff staff args))
+  (check-type staff staff)
+  (check-type staff-pos integer)
+  (check-type notehead (member :long :breve :whole :half :filled))
+  (check-type lbeams (integer 0 5))
+  (check-type rbeams (integer 0 5))
+  (check-type dots (integer 0 3))
+  (check-type xoffset number)
+  (locally
+      (declare
+       (type staff staff)
+       (type integer staff-pos)
+       (type (member :long :breve :whole :half :filled) notehead)
+       (type (integer 0 5) lbeams)
+       (type (integer 0 5) rbeams)
+       (type (integer 0 3) dots)
+       (type number xoffset))
+    (apply #'make-instance 'rest :staff staff args)))
 
 (defmethod slots-to-be-saved append ((s rest))
   '(staff staff-pos))
@@ -535,9 +561,10 @@ flatter by removing some sharps and/or adding some flats"))
 (defclass melody-bar (bar) ())
 
 (defun make-melody-bar (&rest args &key elements)
-  (declare (type list elements)
-           (ignore elements))
-  (apply #'make-instance 'melody-bar args))
+  (check-type elements list)
+  (locally
+      (declare (type list elements))
+    (apply #'make-instance 'melody-bar args)))
 
 (defmethod make-bar-for-staff ((staff fiveline-staff) &rest args &key elements)
   (declare (ignore elements))

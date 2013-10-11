@@ -270,9 +270,10 @@
      do (setf (slice bar) s)))
 
 (defun make-slice (&rest args &key bars)
-  (declare (type list bars)
-           (ignore bars))
-  (apply #'make-instance 'slice args))
+  (check-type bars list)
+  (locally
+      (declare (type list bars))
+    (apply #'make-instance 'slice args)))
 
 (defmethod slots-to-be-saved append ((s slice))
   '(bars))
@@ -366,10 +367,14 @@
 (defgeneric make-layer-for-staff (staff &rest args &key staves head body tail &allow-other-keys))
 
 (defun make-layer (staves &rest args &key head body tail &allow-other-keys)
-  (declare (type list staves)
-           (type (or slice null) head body tail)
-           (ignore head body tail))
-  (apply #'make-layer-for-staff (car staves) :staves staves args))         
+  (check-type staves list)
+  (check-type head (or slice null))
+  (check-type body (or slice null))
+  (check-type tail (or slice null))
+  (locally
+      (declare (type list staves)
+               (type (or slice null) head body tail))
+    (apply #'make-layer-for-staff (car staves) :staves staves args)))         
 
 (defmethod slices ((layer layer))
   (with-slots (head body tail) layer

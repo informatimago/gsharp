@@ -41,15 +41,20 @@
 (defun make-lyrics-element (staff &rest args
                             &key (notehead :filled) (lbeams 0) (rbeams 0)
                             (dots 0) (xoffset 0))
-  (declare (type staff staff)
-           (type (member :long :breve :whole :half :filled) notehead)
-           (type (integer 0 5) lbeams)
-           (type (integer 0 5) rbeams)
-           (type (integer 0 3) dots)
-           (type number xoffset)
-           (ignore notehead lbeams rbeams dots xoffset))
-  (apply #'make-instance 'lyrics-element
-         :staff staff args))
+  (check-type staff staff)
+  (check-type notehead (member :long :breve :whole :half :filled))
+  (check-type lbeams (integer 0 5))
+  (check-type rbeams (integer 0 5))
+  (check-type dots (integer 0 3))
+  (check-type xoffset number)
+  (locally
+      (declare (type staff staff)
+               (type (member :long :breve :whole :half :filled) notehead)
+               (type (integer 0 5) lbeams)
+               (type (integer 0 5) rbeams)
+               (type (integer 0 3) dots)
+               (type number xoffset))
+    (apply #'make-instance 'lyrics-element :staff staff args)))
 
 (defmethod slots-to-be-saved append ((elem lyrics-element))
   '(staff text))
@@ -76,9 +81,10 @@
 (defclass lyrics-bar (bar) ())
 
 (defun make-lyrics-bar (&rest args &key elements)
-  (declare (type list elements)
-           (ignore elements))
-  (apply #'make-instance 'lyrics-bar args))
+  (check-type elements list)
+  (locally
+      (declare (type list elements))
+    (apply #'make-instance 'lyrics-bar args)))
 
 (defmethod make-bar-for-staff ((staff lyrics-staff) &rest args &key elements)
   (declare (ignore elements))
