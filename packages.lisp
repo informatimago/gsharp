@@ -188,7 +188,7 @@
            #:play-buffer))
 
 (defpackage :gsharp-midi-load
-  (:use :common-lisp :midi :gsharp-buffer)
+  (:use :common-lisp :midi :gsharp-buffer :esa-buffer)
   (:shadowing-import-from :gsharp-buffer #:rest)
   (:export #:midi-stream-p
            #:read-buffer-from-midi-stream))
