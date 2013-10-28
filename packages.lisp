@@ -207,6 +207,9 @@
   (:export #:gsharp #:edit-file))
 
 (in-package :gsharp-numbering)
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  ;; Some implementations reject deftype when a system class is bound to it.
+  (setf (find-class 'number) nil))
 (deftype number () 'cl:number)
 (setf (find-class 'number) (find-class 'cl:number))
 
