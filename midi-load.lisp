@@ -1,22 +1,295 @@
+;;;; -*- mode:lisp;coding:utf-8 -*-
+;;;;**************************************************************************
+;;;;FILE:               midi-load.lisp
+;;;;LANGUAGE:           Common-Lisp
+;;;;SYSTEM:             Common-Lisp
+;;;;USER-INTERFACE:     NONE
+;;;;DESCRIPTION
+;;;;    
+;;;;    Reads MIDI files into a gsharp buffer.
+;;;;    
+;;;;AUTHORS
+;;;;    <PJB> Pascal J. Bourguignon <pjb@informatimago.com>
+;;;;MODIFICATIONS
+;;;;    2013-10-10 <PJB> Created.
+;;;;BUGS
+;;;;LEGAL
+;;;;    GPL3
+;;;;    
+;;;;    Copyright Pascal J. Bourguignon 2013 - 2013
+;;;;    
+;;;;    This program is free software: you can redistribute it and/or modify
+;;;;    it under the terms of the GNU General Public License as published by
+;;;;    the Free Software Foundation, either version 3 of the License, or
+;;;;    (at your option) any later version.
+;;;;    
+;;;;    This program is distributed in the hope that it will be useful,
+;;;;    but WITHOUT ANY WARRANTY; without even the implied warranty of
+;;;;    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+;;;;    GNU General Public License for more details.
+;;;;    
+;;;;    You should have received a copy of the GNU General Public License
+;;;;    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+;;;;**************************************************************************
+
 (in-package :gsharp-midi-load)
 
 
+(defun alist (&rest data &key &allow-other-keys)
+  (loop
+    :for (key value) :on data :by (function cddr)
+    :collect (cons key value)))
+
+
+;;;
+;;; PROCESS-EVENT
+;;;
+
+(defgeneric process-event (state event)
+  (:method (state event)
+    (declare (ignore state event))
+    :ignored))
+
+;;;
+;;; TIMINGS
+;;;
+
+(defclass timings ()
+  ((numerator                  :initform  4
+                               :initarg :numerator
+                               :reader timings-numerator)
+   (denominator                :initform  4
+                               :initarg :denominator
+                               :reader timings-denominator)
+   (midi-clock/metronome-click :initform 24
+                               :initarg :midi-clock/metronome-click
+                               :reader timings-midi-clock/metronome-click)
+   (32ths/24-midi-clock        :initform 8
+                               :initarg :32ths/24-midi-clock
+                               :reader timings-32ths/24-midi-clock
+                               :documentation "this gives the length of the quater-note:
+24 * midi-clock = 32ths/24-midi-clock * 32ths
+1 * quater-note = 8 * 32ths
+1 * quater-note = 8 * 24 * midi-clock / 32ths/24-midi-clock
+
+32ths/24-midi-clock * quater-note / 192 =  1 * midi-clock
+")
+   (division                   :initform 240
+                               :initarg :division
+                               :reader timings-division
+                               :documentation "delta-time per quarter-note")
+   (tempo-µs                   :initform 500000 ; = 120 BPM
+                               :initarg :tempo-µs
+                               :reader timings-tempo-µs
+                               :documentation "µs per quarter-note")
+   (frame/second               :initform 25
+                               :initarg frame/second
+                               :reader timings-frame/second)
+   (drop-frame                 :initform nil
+                               :initarg :drop-frame
+                               :reader timings-drop-frame)
+   (dirty                      :initform t)
+   tempo ; tempo in second
+   unit ; the time-length of a delta-time = 1.
+   measure ; the duration of a measure.
+   midi-clock ; the duration of a MIDI-clock.
+   metronome-click ; the period of the metronome
+   maxima long breve whole half filled 8th 16th 32th 64th 128th)
+  (:documentation "
+
+The TIMINGS instances keep track of the timing of the MIDI track.  It
+takes from midi events the timing information and maintains the
+current values, notably TIMINGS-UNIT which gives the time of one
+delta-time.
+
+"))
+
+
+(defmethod print-object ((self timings) stream)
+  (with-slots (numerator denominator midi-clock/metronome-click
+                         32ths/24-midi-clock division tempo-µs
+                         frame/second drop-frame
+                         dirty
+                         tempo unit measure midi-clock metronome-click maxima
+                         long breve whole half filled 8th 16th 32th 64th 128th) self
+    (format stream "(~A ~{~S~^ ~})"
+            'timings
+            (list :numerator numerator :denominator denominator
+                  :midi-clock/metronome-click midi-clock/metronome-click
+                  :32ths/24-midi-clock 32ths/24-midi-clock
+                  :division division :tempo-µs tempo-µs :frame/second frame/second
+                  :drop-frame drop-frame :dirty dirty :tempo tempo
+                  :unit unit :measure measure :midi-clock midi-clock
+                  :metronome-click metronome-click :maxima maxima :long long
+                  :breve breve :whole whole :half half :filled filled
+                  :8th 8th :16th 16th :32th 32th :64th 64th :128th 128th)))
+  self)
+
+
+(defmacro define-timings-setters (&rest names)
+  `(progn
+     ,@(mapcar (lambda (name)
+                 `(defgeneric (setf ,(intern (concatenate 'string
+                                               (string 'timings-)
+                                               (string name))))
+                      (value timings)
+                    (:method (value (timings timings))
+                      (setf (slot-value timings ',name) value
+                            (slot-value timings 'dirty) t))))
+               names)))
+
+(define-timings-setters numerator denominator
+  midi-clock/metronome-click 32ths/24-midi-clock division tempo-µs
+  frame/second drop-frame)
+
+(defgeneric compute-timings (timings))
+
+(defmacro define-timings-results (&rest names)
+  `(progn
+     ,@(mapcar (lambda (name)
+                 `(defgeneric ,(intern (concatenate 'string
+                                         (string 'timings-)
+                                         (string name)))
+                      (timings)
+                    (:method ((timings timings))
+                      (when (slot-value timings 'dirty)
+                        (compute-timings timings))
+                      (slot-value timings ',name)))) 
+               names)))
+
+(define-timings-results tempo unit measure midi-clock metronome-click
+                        maxima long breve whole half filled 8th 16th 32th 64th 128th)
+
+;; http://cs.fit.edu/~ryan/cse4051/projects/midi/midi.html
+;; http://fr.wikipedia.org/wiki/Mesure_%28solf%C3%A8ge%29
+
+(defmethod compute-timings ((timings timings))
+  "
+RETURN: an a-list giving durations in second, with the following keys:
+        :unit       the time-length of a delta-time = 1.
+        :measure    the duration of a measure.
+        :midi-clock the duration of a MIDI-clock.
+        :metronome  the period of the metronome
+        :maxima :long  :breve :whole  :half   :filled :8th    :16th   :32th   :64th   :128th
+                       carrée ronde   blanche noire   croche  2croche 3croche 4croche 5croche
+        the durations of the various notes.
+"
+  (with-slots (numerator denominator midi-clock/metronome-click
+                         32ths/24-midi-clock division tempo-µs
+                         ;; frame/second drop-frame
+
+                         dirty
+                         
+                         tempo unit measure midi-clock metronome-click maxima
+                         long breve whole half filled 8th 16th 32th 64th 128th) timings
+    (when dirty
+      ;; divisions: 240
+      ;; This may be in either of two formats, depending on the value of MS bit:
+      ;; 
+      ;; Bit:	15	14 ... 8	7 ... 0
+      ;; <division>	0	ticks per quarter note
+      ;; 1	-frames/second	ticks / frame
+      (setf tempo            (/ tempo-µs 1000000)
+            unit             (if (plusp division)
+                                 (/ tempo division)
+                                 (error "smpte not implemented yet")
+                                 #+not-implemented-yet
+                                 (let ((frames/second (truncate division 256))
+                                       (ticks/frame   (ldb (byte 8 0) division)))
+                                   (error "smpte not implemented yet")))
+
+            measure          (* tempo numerator)
+            maxima           (* tempo 32)
+            long             (* tempo 16)
+            breve            (* tempo  8)
+            whole            (* tempo  4)
+            half             (* tempo  2)
+            filled              tempo
+            8th              (/ tempo  2)
+            16th             (/ tempo  4)
+            32th             (/ tempo  8)
+            64th             (/ tempo 16)
+            128th            (/ tempo 32)
+            
+            midi-clock       (/ (* 32ths/24-midi-clock filled) 192) ; second/midi-clock
+            metronome-click  (* midi-clock midi-clock/metronome-click)
+            dirty            nil))))
+
+
+
+(defmethod process-event ((timings timings) (file midifile))
+  (setf (timings-division timings) (midifile-division file)))
+
+(defmethod process-event ((timings timings) (message time-signature-message))
+  (setf (timings-numerator                  timings) (message-numerator message)
+        (timings-denominator                timings) (expt 2 (message-denominator message))
+        (timings-midi-clock/metronome-click timings) (slot-value message 'midi::cc)
+        (timings-32ths/24-midi-clock        timings) (slot-value message 'midi::bb)))
+
+(defmethod process-event ((timings timings) (message tempo-message))
+  (setf (timings-tempo-µs timings)   (message-tempo message)))
+
+(defmethod process-event ((timings timings) (message smpte-offset-message))
+  (case (ldb (byte 2 6) (slot-value message 'midi::hr))
+    ((0)  (setf (timings-frame/second timings) 24
+                (timings-drop-frame timings) nil))
+    ((1)  (setf (timings-frame/second timings) 25
+                (timings-drop-frame timings) nil))
+    ((2)  (setf (timings-frame/second timings) 30
+                (timings-drop-frame timings) t))
+    ((3)  (setf (timings-frame/second timings) 30
+                (timings-drop-frame timings) nil))))
+
+
+
+
+
+
+;; (timings 2000000/1000000 240 4 2 24 8)
+;; ((:unit . 1/120)
+;;  (:midi-clock . 1/12)
+;;  (:measure . 8)
+;;  (:metronome . 2)
+;;  (:maxima . 64)
+;;  (:long . 32)
+;;  (:breve . 16)
+;;  (:whole . 8)
+;;  (:half . 4)
+;;  (:filled . 2)
+;;  (:8th . 1)
+;;  (:16th . 1/2)
+;;  (:32th . 1/4)
+;;  (:64th . 1/8)
+;;  (:128th . 1/16))
+
+
+
+
+;;;
+;;; MIDI-NOTE stores the instantaneous state of a MIDI note. 
+;;; 
 
 (defgeneric duration (note))
-(defgeneric note-change (note event))
+(defgeneric note-on  (note event time))
+(defgeneric note-off (note event time))
+
 
 (defclass midi-note ()
-  ((key              :initarg :key :reader key)
-   (initial-velocity :initform 0   :accessor initial-velocity)
-   (current-velocity :initform 0   :accessor current-velocity)
-   (note-is-on       :initform nil :accessor note-is-on)
-   (note-on-time     :initform 0   :accessor note-on-time)
-   (note-off-time    :initform 0   :accessor note-off-time)))
+  ((key                 :initarg :key :reader key)
+   (initial-velocity    :initform 0   :accessor initial-velocity)
+   (current-velocity    :initform 0   :accessor current-velocity)
+   (note-is-on          :initform nil :accessor note-is-on)
+   (note-on-time        :initform 0   :accessor note-on-time)
+   (note-off-time       :initform 0   :accessor note-off-time)))
 
 (defmethod print-object ((self midi-note) stream)
-  (prin1 (list 'note :key (key self) :duration (duration self)
-               :initial-velocity (initial-velocity self)
-               :final-velocity (current-velocity self)) stream)
+  (format stream "(~A ~A ~A ~A ~,9F ~A ~,9F ~A ~A ~A ~A)"
+          'note
+          :key (key self)
+          :time (note-on-time self)
+          :duration-s (duration self)
+          :initial-velocity (initial-velocity self)
+          :final-velocity (current-velocity self))
   self)
 
 (defmethod duration ((note midi-note))
@@ -25,70 +298,103 @@
       (- (note-off-time note) (note-on-time note))))
 
 
-(defmethod note-on ((note midi-note) event)
+(defmethod note-on ((note midi-note) event time)
   (assert (= (key note) (message-key event)))
   (if (note-is-on note)
       (setf (current-velocity note) (message-velocity event))
       (setf (initial-velocity note) (message-velocity event)
             (current-velocity note) (message-velocity event)
             (note-is-on note) t
-            (note-on-time note) (message-time event))))
+            (note-on-time note) time)))
 
-(defmethod note-off ((note midi-note) event)
+(defmethod note-off ((note midi-note) event time)
   (assert (= (key note) (message-key event)))
   (when (note-is-on note)
     (setf (note-is-on note) nil
-          (note-off-time note) (message-time event))))
+          (current-velocity note) (message-velocity event)
+          (note-off-time note) time)))
 
 
 
+;;;
+;;; output protocol
+;;; 
 
 (defgeneric output-note    (output note))
 (defgeneric output-silence (output duration))
 
-(defgeneric process-event (state event))
+
+
+;;;
+;;; MIDI-STATE stores the instantaneous state of all MIDI notes, and
+;;; process the MIDI events. 
+;;;
+
 
 (defclass midi-state ()
-  ((notes  :initform (make-array '(16 128) :initial-element nil) :reader notes)
-   (output :initform t :initarg :output :reader output)))
+  ((notes        :initform (make-array '(16 128) :initial-element nil)
+                 :reader  notes)
+   (output       :initform t
+                 :initarg :output
+                 :reader output)
+   (timings      :initform (make-instance 'timings)
+                 :initarg :timings
+                 :reader timings)))
 
-(defmethod get-note ((state midi-state) (event midi::voice-message))
-  (or (aref (notes state) (message-channel event) (message-key event))
-      (setf (aref (notes state) (message-channel event) (message-key event))
-            (make-instance 'midi-note :key (message-key event)))))
+
+(defgeneric get-note (state event)
+  (:documentation "
+Returns the MIDI-NOTE of the STATE for the pitch and channel
+specified by the midi EVENT.
+")
+  (:method ((state midi-state) (event midi::voice-message))
+    (or (aref (notes state) (message-channel event) (message-key event))
+        (setf (aref (notes state) (message-channel event) (message-key event))
+              (make-instance 'midi-note :key (message-key event))))))
 
 
-(defmethod process-event (state event)
-  (values))
+
+
+(defmethod process-event ((state midi-state) event)
+  (call-next-method)
+  (process-event (timings state) event))
+
+
 
 (defmethod process-event ((state midi-state) (event note-on-message))
-  (let ((note (get-note state event)))
+  (let ((note  (get-note state event))
+        (time  (* (message-time event) (timings-unit (timings state)))))
     (cond
       ((zerop (message-velocity event))
-       (note-off note event)
+       (note-off note event time)
        (output-note (output state) note))
       ((note-is-on note)
-       (note-on note event))
+       (note-on note event time))
       (t
-       (let ((duration (- (message-time event)
-                          (note-off-time note))))
+       (let ((duration (- time (note-off-time note))))
          (when (plusp duration)
            (output-silence (output state) duration))
-         (note-on note event))))))
+         (note-on note event time))))))
+
 
 (defmethod process-event ((state midi-state) (event note-off-message))
-  (let ((note (get-note state event)))
+  (let ((note (get-note state event))
+        (time (* (message-time event) (timings-unit (timings state)))))
     (when (note-is-on note)
-      (note-off note event)
+      (note-off note event time)
       (output-note (output state) note))))
 
 
+
+;;;
+;;; Test output
+;;;
 
 (defmethod output-note ((stream t) (note midi-note))
   (print note stream))
 
 (defmethod output-silence ((stream t) duration)
-  (print `(silence ,duration) stream))
+  (format stream "~%(~A ~A ~,9F)" 'silence :duration-s duration))
 
 
 
@@ -104,16 +410,18 @@
       (setf (car *cache*) stream
             (cdr *cache*) (ignore-errors
                             (let ((start (file-position stream)))
-                              (unwind-protect (handler-case (read-midi-file (pathname stream))
-                                                ((or unknown-event header) (midi-condition)
-                                                  (error "Not a midi file ~S ~S" stream midi-condition)))
+                              (unwind-protect
+                                   (handler-case (read-midi-file (pathname stream))
+                                     ((or unknown-event header) (midi-condition)
+                                       (error "Not a midi file ~S ~S" stream midi-condition)))
                                 (file-position stream start)))))))
 
 
-(assert (equal '(nil nil)
-               (with-open-file (stream #P"~/works/gsharp/src/abnotation/files/bach-suite-spacing-1.gsh")
-                 (list (midi-stream-p stream)
-                       (midi-stream-p stream)))))
+;; (assert (equal '(nil nil)
+;;                (with-open-file (stream #P"~/works/gsharp/src/abnotation/files/bach-suite-spacing-1.gsh")
+;;                  (list (midi-stream-p stream)
+;;                        (midi-stream-p stream)))))
+
 
 
 
@@ -121,9 +429,10 @@
   ((buffer :initarg :buffer :reader buffer)))
 
 (defmethod output-note    ((output buffer-output) note)
-  )
+  (declare (ignorable output note)))
 (defmethod output-silence ((output buffer-output) duration)
-  )
+  (declare (ignorable output duration)))
+
 
 
 (defun read-midi-track (track buffer)
@@ -148,7 +457,7 @@
                        :right-edge 700
                        :left-offset 30
                        :left-margin 20))
-         (staves   (gsharp::staves/treble8va+treble+bass+bass8vb))
+         (staves   (gsharp::staves/treble15ma+treble+bass+bass15mb))
          (layer    (make-layer staves))
          (segments (make-instance 'segment
                        :buffer buffer
@@ -165,18 +474,231 @@
 
 ;;; Tests
 
+
 (defparameter *file* (with-open-file (stream #P"~/works/gsharp/src/abnotation/files/1-canal.mid")
-   (list (midi-stream-p stream)
-         (midifile-tracks (midi-stream-p stream)))))
+                       (list (midi-stream-p stream)
+                             (midifile-tracks (midi-stream-p stream)))))
 
 (defparameter *state* (make-instance 'midi-state))
 
-;;(trace note-change)
+
+#-(and)
 (dolist (event (first (second *file*)))
   (process-event *state* event))
 
 
+#-(and)
+"
+http://home.roadrunner.com/~jgglatt/tech/midifile.htm
 
+Time Signature
+
+FF 58 04 nn dd cc bb
+
+Time signature is expressed as 4 numbers. nn and dd represent the
+\"numerator\" and \"denominator\" of the signature as notated on sheet
+music. The denominator is a negative power of 2: 2 = quarter note, 3 =
+eighth, etc.
+
+The cc expresses the number of MIDI clocks in a metronome click.
+
+The bb parameter expresses the number of notated 32nd notes in a MIDI
+quarter note (24 MIDI clocks). This event allows a program to relate
+what MIDI thinks of as a quarter, to something entirely different.
+
+For example, 6/8 time with a metronome click every 3 eighth notes and
+24 clocks per quarter note would be the following event:
+
+FF 58 04 06 03 18 08
+
+NOTE: If there are no time signature events in a MIDI file, then the
+time signature is assumed to be 4/4.
+
+In a format 0 file, the time signatures changes are scattered
+throughout the one MTrk. In format 1, the very first MTrk should
+consist of only the time signature (and tempo) events so that it could
+be read by some device capable of generating a \"tempo map\". It is best
+not to place MIDI events in this MTrk. In format 2, each MTrk should
+begin with at least one initial time signature (and tempo) event.
+
+
+Tempo
+
+FF 51 03 tt tt tt
+
+Indicates a tempo change. The 3 data bytes of tt tt tt are the tempo
+in microseconds per quarter note. In other words, the microsecond
+tempo value tells you how long each one of your sequencer's \"quarter
+notes\" should be. For example, if you have the 3 bytes of 07 A1 20,
+then each quarter note should be 0x07A120 (or 500,000) microseconds
+long.
+
+So, the MIDI file format expresses tempo as \"the amount of time (ie,
+microseconds) per quarter note\".
+
+NOTE: If there are no tempo events in a MIDI file, then the tempo is
+assumed to be 120 BPM
+
+In a format 0 file, the tempo changes are scattered throughout the one
+MTrk. In format 1, the very first MTrk should consist of only the
+tempo (and time signature) events so that it could be read by some
+device capable of generating a \"tempo map\". It is best not to place
+MIDI events in this MTrk. In format 2, each MTrk should begin with at
+least one initial tempo (and time signature) event.
+
+See also: Tempo and Timebase.
+
+
+SMPTE Offset
+
+FF 54 05 hr mn se fr ff
+
+Designates the SMPTE start time (hours, minutes, seconds, frames,
+subframes) of the MTrk. It should be at the start of the MTrk. The
+hour should not be encoded with the SMPTE format as it is in MIDI Time
+Code. In a format 1 file, the SMPTE OFFSET must be stored with the
+tempo map (ie, the first MTrk), and has no meaning in any other
+MTrk. The ff field contains fractional frames in 100ths of a frame,
+even in SMPTE based MTrks which specify a different frame subdivision
+for delta-times (ie, different from the subframe setting in the MThd).
+
+
+24 MIDI Clock / quarter note.
+
+
+BPM = 60,000,000/MicroTempo
+MicrosPerPPQN = MicroTempo/TimeBase
+MicrosPerMIDIClock = MicroTempo/24
+PPQNPerMIDIClock = TimeBase/24
+MicrosPerSubFrame = 1000000 * Frames * SubFrames
+SubFramesPerQuarterNote = MicroTempo/(Frames * SubFrames)
+SubFramesPerPPQN = SubFramesPerQuarterNote/TimeBase
+MicrosPerPPQN = SubFramesPerPPQN * Frames * SubFrames 
+
+
+http://en.wikipedia.org/wiki/MIDI_timecode
+
+MIDI timecode
+From Wikipedia, the free encyclopedia
+
+MIDI time code (MTC), or MIDI time division, embeds the same timing
+information as standard SMPTE timecode as a series of small
+'quarter-frame' MIDI messages. There is no provision for the user bits
+in the standard MIDI time code messages, and SysEx messages are used
+to carry this information instead. The quarter-frame messages are
+transmitted in a sequence of eight messages, thus a complete timecode
+value is specified every two frames. If the MIDI data stream is
+running close to capacity, the MTC data may arrive a little behind
+schedule which has the effect of introducing a small amount of
+jitter. In order to avoid this it is ideal to use a completely
+separate MIDI port for MTC data. Larger full-frame messages, which
+encapsulate a frame worth of timecode in a single message, are used to
+locate to a time while timecode is not running.
+
+Unlike standard SMPTE timecode, MIDI timecode's quarter-frame and
+full-frame messages carry a two-bit flag value that identifies the
+rate of the timecode, specifying it as either:
+
+    24 frame/s (standard rate for film work)
+    25 frame/s (standard rate for PAL video)
+    29.97 frame/s (drop-frame timecode for NTSC video)
+    30 frame/s (non-drop timecode for NTSC video)
+
+MTC distinguishes between film speed and video speed only by the rate
+at which timecode advances, not by the information contained in the
+timecode messages; thus, 29.97 frame/s dropframe is represented as 30
+frame/s dropframe at 0.1% pulldown.
+
+MTC allows the synchronisation of a sequencer or DAW with other
+devices that can synchronise to MTC or for these devices to 'slave' to
+a tape machine that is striped with SMPTE. For this to happen a SMPTE
+to MTC converter needs to be employed. It is possible for a tape
+machine to synchronise to an MTC signal (if converted to SMPTE), if
+the tape machine is able to 'slave' to incoming timecode via motor
+control, which is a rare feature.
+
+
+1. Time code format
+
+The MIDI time code is 32 bits long, of which 24 are used, while 8 bits
+are unused and always zero. Because the full-time code messages
+requires that the most significant bits of each byte are zero (valid
+MIDI data bytes), there are really only 28 available bits and 4 spare
+bits.
+
+Like most audiovisual timecodes such as SMPTE time code, it encodes
+only time of day, repeating each 24 hours. Time is given in units of
+hours, minutes, seconds, and frames. There may be 24, 25, or 30 frames
+per second.
+
+Each component is assigned one byte:
+
+Byte 0 
+    0rrhhhhh: Rate (0–3) and hour (0–23).
+
+        rr = 00: 24 frames/s
+        rr = 01: 25 frames/s
+        rr = 10: 29.97 frames/s (SMPTE drop-frame timecode)
+        rr = 11: 30 frames/s
+
+smpte-offset-message.hr = 64 ==> 29.97 frames/s
+
+Byte 1 
+    00mmmmmm: Minute (0–59)
+Byte 2 
+    00ssssss: Second (0–59)
+Byte 3 
+    000fffff: Frame (0–29, or less at lower frame rates)
+
+1.1 Full time code
+
+When there is a jump in the time code, a single full-time code is sent
+to synchronize attached equipment. This takes the form of a special
+global system exclusive message:
+
+    F0 7F 7F 01 01 hh mm ss ff F7
+
+The manufacturer ID of 7F indicates a real-time universal message, the
+channel of 7F indicates it is a global broadcast. The following ID of
+01 identifies this is a time code type message, and the second 01
+indicates it's a full-time code message. The 4 bytes of time code
+follow. Although MIDI is generally little-endian, the 4 time code
+bytes follow in big-endian order, followed by a F7 \"end of exclusive\"
+byte.
+
+After a jump, the time clock stops until the first following
+quarter-frame message is received.
+
+1.2 Quarter-frame messages
+
+When the time is running continuously, the 32-bit time code is broken
+into 8 4-bit pieces, and one piece is transmitted each quarter
+frame. I.e. 96—120 times per second, depending on the frame rate. A
+quarter-frame messages consists of a status byte of 0xF1, followed by
+a single 7-bit data value: 3 bits to identify the piece, and 4 bits of
+partial time code. When time is running forward, the piece numbers
+increment from 0–7; with the time that piece 0 is transmitted is the
+coded instant, and the remaining pieces are transmitted later.
+
+If the MIDI data stream is being rewound, the time codes count
+backward. Again, piece 0 is transmitted at the coded moment.
+
+The time code is divided little-endian as follows:
+MIDI time code pieces Piece # 	Data byte 	Significance
+0 	0000 ffff 	Frame number lsbits
+1 	0001 000f 	Frame number msbit
+2 	0010 ssss 	Second lsbits
+3 	0011 00ss 	Second msbits
+4 	0100 mmmm 	Minute lsbits
+5 	0101 00mm 	Minute msbits
+6 	0110 hhhh 	Hour lsbits
+7 	0111 0rrh 	Rate and hour msbit
+
+"
+
+
+
+#-(and)    
 '((midifile :format 0 :division 240 :track nil)
   (((time-signature-message :time 0 :status 255 :nn 4 :dd 2 :cc 24 :bb 8)
     (tempo-message :time 0 :status 255 :tempo 1000000)
@@ -4594,5 +5116,6 @@
      (note-on-message :time 146722 :status 144 :channel 0 :key 55 :velocity 0)
      (note-on-message :time 146722 :status 144 :channel 0 :key 85 :velocity 87)
      (note-on-message :time 146818 :status 144 :channel 0 :key 85 :velocity 0))))
+
 
 ;;;; THE END ;;;;
