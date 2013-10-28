@@ -1632,8 +1632,8 @@ Prints the results in the minibuffer."
                                     (lambda (so-far mode)
                                       (complete-from-possibilities
                                        so-far
-                                       '(:treble8va :treble :treble8vb
-                                         :bass8va   :bass   :bass8vb
+                                       '(:treble15ma :treble8va :treble :treble8vb :treble15mb
+                                         :bass15ma   :bass8va   :bass   :bass8vb   :bass15mb
                                          :c :percussion)
                                        '()
                                        :action mode

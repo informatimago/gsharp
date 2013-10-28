@@ -158,14 +158,16 @@
                      ;; view, some differentiation (by putting an
                      ;; italic 8 underneath, for instance) would be
                      ;; good.
-                     ((:treble8va :treble :treble8vb) :g-clef)
-                     ((:bass8va   :bass   :bass8vb)   :f-clef)
-                     ((:c)                            :c-clef))
+                     ((:treble15ma :treble8va :treble  :treble8vb) :g-clef)
+                     ((:bass8va    :bass      :bass8vb :bass15mb)  :f-clef)
+                     ((:c)                                         :c-clef))
                    x (staff-step (- staff-step)))
-  (case name ;; FIXME
-    ((:treble8va :bass8va)    #|draw 8 above|#)
-    ((:treble8vb :bass8vb)  #|draw 8 below|#)))
-                       
+  (case name 
+    ((:treble15ma :bass15ma)            #|TODO: draw 15ma above|#)
+    ((:treble8va  :bass8va)             #|TODO: draw  8va above|#)
+    ((:treble8vb  :bass8vb)             #|TODO: draw  8vb below|#)
+    ((:treble15mb :bass15mb)            #|TODO: draw 15mb below|#)))
+
 (define-presentation-type clef () :options (name x staff-step))
 
 (define-presentation-method present

@@ -409,12 +409,16 @@ specified, returns the first (hopefully default) staff."
   (let* ((octave-change (ignore-errors (parse-integer (named-pcdata clef "clef-octave-change"))))
          (name (stringcase (named-pcdata clef "sign")
                            ("G" (case octave-change
+                                  ((+2)      :treble15ma)
                                   ((+1)      :treble8va)
                                   ((-1)      :treble8vb)
+                                  ((-2)      :treble15mb)
                                   (otherwise :treble)))
                            ("F" (case octave-change
+                                  ((+2)      :bass15ma)
                                   ((+1)      :bass8va)
                                   ((-1)      :bass8vb)
+                                  ((-2)      :bass15mb)
                                   (otherwise :bass)))
                            ("C" :c)
                            ("percussion" :percussion)
@@ -1064,10 +1068,10 @@ dotted 16th note will return 8."
                ;; possibilities for MusicXML:
                ;; G, F, C, percussion, TAB, and none
                for clef-sign = (case (name clef)
-                                 ((:treble8va :treble :treble8vb) "G")
-                                 ((:bass8va   :bass   :bass8vb)   "F")
-                                 ((:c)                            "C")
-                                 ((:percussion)                   "percussion"))
+                                 ((:treble15ma :treble8va :treble :treble8vb :treble15ma) "G")
+                                 ((:bass15ma   :bass8va   :bass   :bass8vb   :bass15mb)   "F")
+                                 ((:c)                                                    "C")
+                                 ((:percussion)                                  "percussion"))
                for clef-line = (1+ (/ (lineno clef) 2))
                for staff-num = (gethash staff *staff-hash*)
                do
@@ -1079,12 +1083,18 @@ dotted 16th note will return 8."
                    (cxml:with-element "line"
                      (cxml:text (write-to-string clef-line)))
                    (cond
+                     ((member (name clef) '(:treble15ma :bass15ma))
+                      (cxml:with-element "clef-octave-change"                    
+                        (cxml:text "2")))
                      ((member (name clef) '(:treble8va :bass8va))
                       (cxml:with-element "clef-octave-change"                    
                         (cxml:text "1")))
                      ((member (name clef) '(:treble8vb :bass8vb))
                       (cxml:with-element "clef-octave-change"                    
-                        (cxml:text "-1")))))))))
+                        (cxml:text "-1")))
+                     ((member (name clef) '(:treble15mb :bass15mb))
+                      (cxml:with-element "clef-octave-change"                    
+                        (cxml:text "-2")))))))))
 
     ;; process each bar, backing up only if there's a "next" bar
     (loop for voice from 1

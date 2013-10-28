@@ -20,19 +20,25 @@
   ((lineno :reader lineno :initarg :lineno
            :type (or (integer 0 8) null))))
 
+(deftype clef-keywords ()
+  '(member
+    :treble15ma :treble8va :treble :treble8vb :treble15mb
+    :bass15ma   :bass8va   :bass   :bass8vb   :bass15mb
+    :c :percussion))
+
 (defun make-clef (name &key lineno)
-  (check-type name (member :treble8va :treble :treble8vb :bass8va :bass :bass8vb :c :percussion))
+  (check-type name clef-keywords)
   (check-type lineno (or (integer 0 8) null))
   (locally
-      (declare (type (member :treble8va :treble :treble8vb :bass8va :bass :bass8vb :c :percussion) name)
+      (declare (type clef-keywords name)
                (type (or (integer 0 8) null) lineno))
     (when (null lineno)
       (setf lineno
             (ecase name
-              ((:treble8va :treble :treble8vb) 2)
-              ((:bass8va   :bass   :bass8vb)   6)
-              ((:c)                            4)
-              ((:percussion)                   3))))
+              ((:treble15ma :treble8va :treble :treble8vb :treble15mb) 2)
+              ((:bass15ma   :bass8va   :bass    :bass8vb  :bass15mb)   6)
+              ((:c)                                                    4)
+              ((:percussion)                                           3))))
     (make-instance 'clef :name name :lineno lineno)))
 
 (defmethod slots-to-be-saved append ((c clef))
@@ -50,28 +56,32 @@
 ;;; the first flat sign in key signatures with flats
 (defmethod b-position ((clef clef))
   (ecase (name clef)
-    ((:treble8va :treble :treble8vb) (+ (lineno clef) 2))
-    ((:bass8va   :bass   :bass8vb)   (- (lineno clef) 4))
-    ((:c)                            (- (lineno clef) 1))))
+    ((:treble15ma :treble8va :treble :treble8vb  :treble15mb) (+ (lineno clef) 2))
+    ((:bass15ma   :bass8va   :bass   :bass8vb    :bass15mb)   (- (lineno clef) 4))
+    ((:c)                                                     (- (lineno clef) 1))))
 
 
 ;;; given a clef, return the staff step of the F that should have
 ;;; the first sharp sign in key signatures with sharps
 (defmethod f-position ((clef clef))
   (ecase (name clef)
-    ((:treble8va :treble :treble8vb) (+ (lineno clef) 6))
-    ((:bass8va   :bass   :bass8vb)   (lineno clef))
-    ((:c)                            (+ (lineno clef) 3))))
+    ((:treble15ma :treble8va :treble :treble8vb  :treble15mb) (+ (lineno clef) 6))
+    ((:bass15ma   :bass8va   :bass   :bass8vb    :bass15mb)   (lineno clef))
+    ((:c)                                                     (+ (lineno clef) 3))))
 
 
 (defmethod bottom-line ((clef clef))
   (- (ecase (name clef)
+       (:treble15ma 46)
        (:treble8va  39)
        (:treble     32)
        (:treble8vb  25)
+       (:treble15mb 18)
+       (:bass15ma   38)
        (:bass8va    31)
        (:bass       24)
        (:bass8vb    17)
+       (:bass15mb   10)
        (:c          28))
      (lineno clef)))
 
