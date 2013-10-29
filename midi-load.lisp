@@ -1,4 +1,4 @@
-;;;; -*- mode:lisp;coding:utf-8 -*-
+(o ;;;; -*- mode:lisp;coding:utf-8 -*-
 ;;;;**************************************************************************
 ;;;;FILE:               midi-load.lisp
 ;;;;LANGUAGE:           Common-Lisp
@@ -32,7 +32,7 @@
 ;;;;    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 ;;;;**************************************************************************
 
-(in-package :gsharp-midi-load)
+ in-package :gsharp-midi-load)
 
 
 (defun alist (&rest data &key &allow-other-keys)
@@ -272,6 +272,7 @@ RETURN: an a-list giving durations in second, with the following keys:
 (defgeneric duration (note))
 (defgeneric note-on  (note event time))
 (defgeneric note-off (note event time))
+(defgeneric quantized-duration (note))
 
 
 (defclass midi-note ()
@@ -280,7 +281,8 @@ RETURN: an a-list giving durations in second, with the following keys:
    (current-velocity    :initform 0   :accessor current-velocity)
    (note-is-on          :initform nil :accessor note-is-on)
    (note-on-time        :initform 0   :accessor note-on-time)
-   (note-off-time       :initform 0   :accessor note-off-time)))
+   (note-off-time       :initform 0   :accessor note-off-time)
+   (timing              :initarg :timings :reader timings)))
 
 (defmethod print-object ((self midi-note) stream)
   (format stream "(~A ~A ~A ~A ~,9F ~A ~,9F ~A ~A ~A ~A)"
@@ -296,6 +298,16 @@ RETURN: an a-list giving durations in second, with the following keys:
   (if (note-is-on note)
       0
       (- (note-off-time note) (note-on-time note))))
+
+(defmethod accidentals ((note midi-note))
+  ;; TODO.   Is it what's displayed? Because the pitch is alread 0..127 so it should cover the sharps and flats…
+  ;;; :natural :flat :double-flat :sharp or :double-sharp.
+  :natural)
+
+(defmethod quantized-duration ((note midi-note))
+  ;; TODO
+  ;; (with-accessors )
+  (values 1 0))
 
 
 (defmethod note-on ((note midi-note) event time)
@@ -350,7 +362,9 @@ specified by the midi EVENT.
   (:method ((state midi-state) (event midi::voice-message))
     (or (aref (notes state) (message-channel event) (message-key event))
         (setf (aref (notes state) (message-channel event) (message-key event))
-              (make-instance 'midi-note :key (message-key event))))))
+              (make-instance 'midi-note
+                  :key (message-key event)
+                  :timings (timings state))))))
 
 
 
@@ -423,56 +437,70 @@ specified by the midi EVENT.
 ;;                        (midi-stream-p stream)))))
 
 
+;;; gsharp-buffer-output
 
-
-(defclass buffer-output ()
-  ((buffer :initarg :buffer :reader buffer)))
-
-(defmethod output-note    ((output buffer-output) note)
-  (declare (ignorable output note)))
-(defmethod output-silence ((output buffer-output) duration)
-  (declare (ignorable output duration)))
-
-
-
-(defun read-midi-track (track buffer)
-  (let ((state (make-instance 'midi-state :output (make-instance 'buffer-output :buffer buffer))))
-    (dolist (event track)
-      (process-event state event))))
-
-
-(defun read-buffer-from-midi-stream (stream)
-  "
-
-- Select the staves: (gsharp::staves/treble8va+treble+bass+bass8vb)
-
-- Select what to do with the channels: select one or more of them to
-  be merged, transposed, etc.
-
-"
-  (let* ((file     (midi-stream-p stream))
-         (buffer   (make-instance 'buffer
+(defun prepare-buffer (filepath staves)
+  (let* ((buffer   (make-instance 'buffer
                        :min-width 12
                        :spacing-style 1.0
                        :right-edge 700
                        :left-offset 30
                        :left-margin 20))
-         (staves   (gsharp::staves/treble15ma+treble+bass+bass15mb))
          (layer    (make-layer staves))
          (segments (make-instance 'segment
                        :buffer buffer
                        :layers (list layer))))
     (setf (staves   buffer) staves
           (segments buffer) segments
-          (filepath buffer) (pathname stream)
+          (filepath buffer) filepath
           (needs-saving buffer) t)
-
-    (read-midi-track (first (midifile-tracks file)) buffer)
-    
     buffer))
 
+(defclass gsharp-buffer-output ()
+  ((buffer :initarg :buffer :reader buffer)))
 
+(defmethod initialize-instance ((self gsharp-buffer-output) &key filepath &allow-other-keys)
+  (call-next-method)
+  (unless (and (slot-boundp self 'buffer) (slot-value self 'buffer))
+    (setf (slot-value self 'buffer) (prepare-buffer filepath (gsharp::staves/treble15ma+treble+bass+bass15mb))))
+  self)
+
+
+(defmethod output-note ((output gsharp-buffer-output) (note midi-note))
+  (with-slots (buffer) output
+    (multiple-value-bind (head dots) (quantized-duration note)
+      (make-note (key note)
+                 (select-staf (staves buffer) (key note))
+                 :accidentals (accidentals note)
+                 :head head
+                 :dots dots))))
+
+(defmethod output-silence ((output gsharp-buffer-output) duration)
+  (with-slots (buffer) output
+
+    ))
+
+
+
+(defun read-midi-track (track output)
+  (let ((state (make-instance 'midi-state :output output)))
+    (dolist (event track)
+      (process-event state event))))
+
+(defun read-buffer-from-midi-stream (stream)
+  "
+TODO: Select the staves: (gsharp::staves/treble8va+treble+bass+bass8vb)
+TODO: Select what to do with the channels: select one or more of them to be merged, transposed, etc.
+"
+    (let ((file    (midi-stream-p stream))
+          (gbuffer (make-instance 'gsharp-buffer-output :filepath (pathname stream))))
+      (read-midi-track (first (midifile-tracks file)) gbuffer)
+      (buffer gbuffer)))
+
+
+;;;
 ;;; Tests
+;;;
 
 
 (defparameter *file* (with-open-file (stream #P"~/works/gsharp/src/abnotation/files/1-canal.mid")
