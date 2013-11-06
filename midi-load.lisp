@@ -469,6 +469,9 @@ specified by the midi EVENT.
 (defmethod output-note ((output gsharp-buffer-output) (note midi-note))
   (with-slots (buffer) output
     (multiple-value-bind (head dots) (quantized-duration note)
+      (insert-note (key note)
+                   (insert-cluster)
+                   (accidentals note))
       (make-note (key note)
                  (select-staf (staves buffer) (key note))
                  :accidentals (accidentals note)
