@@ -1,4 +1,4 @@
-(o ;;;; -*- mode:lisp;coding:utf-8 -*-
+;;;; -*- mode:lisp;coding:utf-8 -*-
 ;;;;**************************************************************************
 ;;;;FILE:               midi-load.lisp
 ;;;;LANGUAGE:           Common-Lisp
@@ -32,7 +32,7 @@
 ;;;;    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 ;;;;**************************************************************************
 
- in-package :gsharp-midi-load)
+(in-package :gsharp-midi-load)
 
 
 (defun alist (&rest data &key &allow-other-keys)
