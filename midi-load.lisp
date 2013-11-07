@@ -454,29 +454,59 @@ specified by the midi EVENT.
           (segments buffer) segments
           (filepath buffer) filepath
           (needs-saving buffer) t)
+    (gsharp::make-initial-cursor buffer)
     buffer))
 
 (defclass gsharp-buffer-output ()
-  ((buffer :initarg :buffer :reader buffer)))
+  ((buffer :initarg :buffer :reader buffer)
+   (cursor :reader cursor)))
 
 (defmethod initialize-instance ((self gsharp-buffer-output) &key filepath &allow-other-keys)
   (call-next-method)
   (unless (and (slot-boundp self 'buffer) (slot-value self 'buffer))
     (setf (slot-value self 'buffer) (prepare-buffer filepath (gsharp::staves/treble15ma+treble+bass+bass15mb))))
+  (setf (slot-value self 'cursor) (make-initial-cursor (slot-value self 'buffer)))
   self)
+
+
+
+;;;
+
+
+(defmethod insert-cluster ((output gsharp-buffer-output)
+                           &key (lbeams 0) (rbeams 0) (notehead :filled) (dots 0) (steam-direction :auto))
+  (let ((cluster (make-cluster
+                  :notehead notehead
+                  :lbeams lbeams
+                  :rbeams rbeams
+                  :dots dots
+                  :stem-direction stem-direction))
+        (cursor (cursor output)))
+    (gsharp::insert-element cluster cursor)
+    (gsharp::forward-element cursor)
+    cluster))
+
+(defun insert-note (pitch cluster accidentals)
+  (let* ((state (input-state *application-frame*))
+         (staff (car (staves (layer (slice (bar cluster))))))
+         (note (make-note pitch staff
+                 :head (notehead state)
+                 :accidentals accidentals
+                 :dots (dots state))))
+    (add-note cluster note)))
 
 
 (defmethod output-note ((output gsharp-buffer-output) (note midi-note))
   (with-slots (buffer) output
     (multiple-value-bind (head dots) (quantized-duration note)
-      (insert-note (key note)
-                   (insert-cluster)
-                   (accidentals note))
-      (make-note (key note)
-                 (select-staf (staves buffer) (key note))
-                 :accidentals (accidentals note)
-                 :head head
-                 :dots dots))))
+      (let* ((cluster (insert-cluster output))
+             (staff   (car (staves (layer (slice (bar cluster))))))
+             (note    (make-note  (key note)
+                                  (select-staf (staves buffer) (key note))
+                                  :head        head
+                                  :accidentals (accidentals note)
+                                  :dots        dots)))
+        (add-note cluster note)))))
 
 (defmethod output-silence ((output gsharp-buffer-output) duration)
   (with-slots (buffer) output
