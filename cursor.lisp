@@ -14,6 +14,11 @@
   ((bar :initarg :bar :accessor bar)
    (pos :initarg :pos :accessor pos)))
 
+(defmethod print-object ((self gsharp-cursor) stream)
+  (print-unreadable-object (self stream :identity t :type t)
+    (prin1 (list :bar (bar self) :pos (pos self)) stream))
+  self)
+
 (defun make-cursor (bar pos)
   (let ((result (make-instance 'gsharp-cursor :bar bar :pos pos)))
     (set-cursor result bar pos)

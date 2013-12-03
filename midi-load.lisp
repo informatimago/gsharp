@@ -307,6 +307,7 @@ RETURN: an a-list giving durations in second, with the following keys:
 (defmethod quantized-duration ((note midi-note))
   ;; TODO
   ;; (with-accessors )
+  ;; head beams dots
   (values 1 0))
 
 
@@ -437,7 +438,9 @@ specified by the midi EVENT.
 ;;                        (midi-stream-p stream)))))
 
 
+;;;
 ;;; gsharp-buffer-output
+;;;
 
 (defun prepare-buffer (filepath staves)
   (let* ((buffer   (make-instance 'buffer
@@ -447,14 +450,13 @@ specified by the midi EVENT.
                        :left-offset 30
                        :left-margin 20))
          (layer    (make-layer staves))
-         (segments (make-instance 'segment
-                       :buffer buffer
-                       :layers (list layer))))
+         (segments (list (make-instance 'segment
+                             :buffer buffer
+                             :layers (list layer)))))
     (setf (staves   buffer) staves
-          (segments buffer) segments
+          (segments buffer)  segments
           (filepath buffer) filepath
           (needs-saving buffer) t)
-    (gsharp::make-initial-cursor buffer)
     buffer))
 
 (defclass gsharp-buffer-output ()
@@ -465,7 +467,7 @@ specified by the midi EVENT.
   (call-next-method)
   (unless (and (slot-boundp self 'buffer) (slot-value self 'buffer))
     (setf (slot-value self 'buffer) (prepare-buffer filepath (gsharp::staves/treble15ma+treble+bass+bass15mb))))
-  (setf (slot-value self 'cursor) (make-initial-cursor (slot-value self 'buffer)))
+  (setf (slot-value self 'cursor) (gsharp::make-initial-cursor (slot-value self 'buffer)))
   self)
 
 
@@ -474,7 +476,7 @@ specified by the midi EVENT.
 
 
 (defmethod insert-cluster ((output gsharp-buffer-output)
-                           &key (lbeams 0) (rbeams 0) (notehead :filled) (dots 0) (steam-direction :auto))
+                           &key (lbeams 0) (rbeams 0) (notehead :filled) (dots 0) (stem-direction :auto))
   (let ((cluster (make-cluster
                   :notehead notehead
                   :lbeams lbeams
@@ -487,19 +489,27 @@ specified by the midi EVENT.
     cluster))
 
 (defun insert-note (pitch cluster accidentals)
-  (let* ((state (input-state *application-frame*))
-         (staff (car (staves (layer (slice (bar cluster))))))
+  (let* ((staff (car (staves (layer (slice (bar cluster))))))
          (note (make-note pitch staff
-                 :head (notehead state)
+                 :head (notehead cluster)
                  :accidentals accidentals
-                 :dots (dots state))))
+                 :dots (dots cluster))))
     (add-note cluster note)))
 
 
+;; (define-microtonal-accidentals :double-flat :sesquiflat :flat :semiflat
+;;                                :natural 
+;;                                :semisharp :sharp :sesquisharp :double-sharp)
+;; 
+;; (define-accidentals :double-flat :flat :natural :sharp :double-sharp)
+
 (defmethod output-note ((output gsharp-buffer-output) (note midi-note))
   (with-slots (buffer) output
-    (multiple-value-bind (head dots) (quantized-duration note)
-      (let* ((cluster (insert-cluster output))
+    (multiple-value-bind (head beams dots) (quantized-duration note)
+      (let* ((cluster (insert-cluster output
+                                      :notehead head
+                                      :dots dots
+                                      :rbeams beams))
              (staff   (car (staves (layer (slice (bar cluster))))))
              (note    (make-note  (key note)
                                   (select-staf (staves buffer) (key note))
