@@ -448,7 +448,7 @@ flatter by removing some sharps and/or adding some flats"))
 (defun make-cluster (&rest args
                      &key (notehead :filled) (lbeams 0) (rbeams 0) (dots 0)
                      (xoffset 0) notes (stem-direction :auto))
-  (check-type notehead (member :long :breve :whole :half :filled))
+  (check-type notehead (member :maxima :long :breve :whole :half :filled))
   (check-type lbeams (integer 0 5))
   (check-type rbeams (integer 0 5))
   (check-type dots (integer 0 3))
@@ -457,7 +457,7 @@ flatter by removing some sharps and/or adding some flats"))
   (check-type stem-direction (member :up :down :auto))
   (locally
       (declare
-       (type (member :long :breve :whole :half :filled) notehead)
+       (type (member :maxima :long :breve :whole :half :filled) notehead)
        (type (integer 0 5) lbeams)
        (type (integer 0 5) rbeams)
        (type (integer 0 3) dots)

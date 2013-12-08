@@ -48,6 +48,7 @@
 ;;;
 ;;; Note
 
+
 (defrclass rnote note
   (;; The relative x offset of the accidental of the note with respect
    ;; to the cluster.  A value of nil indicates that accidental has

@@ -104,6 +104,10 @@ delta-time.
 
 "))
 
+(defmethod initialize-instance ((self timings) &key &allow-other-keys)
+  (call-next-method)
+  (compute-timings self)
+  self)
 
 (defmethod print-object ((self timings) stream)
   (with-slots (numerator denominator midi-clock/metronome-click
@@ -272,7 +276,7 @@ RETURN: an a-list giving durations in second, with the following keys:
 (defgeneric duration (note))
 (defgeneric note-on  (note event time))
 (defgeneric note-off (note event time))
-(defgeneric quantized-duration (note))
+(defgeneric quantized-duration (note &optional timings))
 
 
 (defclass midi-note ()
@@ -282,7 +286,7 @@ RETURN: an a-list giving durations in second, with the following keys:
    (note-is-on          :initform nil :accessor note-is-on)
    (note-on-time        :initform 0   :accessor note-on-time)
    (note-off-time       :initform 0   :accessor note-off-time)
-   (timing              :initarg :timings :reader timings)))
+   (timings             :initarg :timings :reader timings)))
 
 (defmethod print-object ((self midi-note) stream)
   (format stream "(~A ~A ~A ~A ~,9F ~A ~,9F ~A ~A ~A ~A)"
@@ -304,11 +308,25 @@ RETURN: an a-list giving durations in second, with the following keys:
   ;;; :natural :flat :double-flat :sharp or :double-sharp.
   :natural)
 
-(defmethod quantized-duration ((note midi-note))
-  ;; TODO
-  ;; (with-accessors )
-  ;; head beams dots
-  (values 1 0))
+
+
+(defmethod quantized-duration ((duration real) &optional timings)
+  (with-slots (maxima long breve whole half filled 8th 16th 32th 64th 128th) timings
+    (loop
+      :for head  :in  '(:filled :filled :filled :filled :filled :filled :half :whole :breve :long :maxima)
+      :for beams :in  '(5       4       3       2       1       0       0     0      0      0     0)
+      :for head-duration :in  (list 128th 64th 32th 16th 8th filled half whole breve long maxima)
+      :while (< head-duration duration)
+      :finally (loop
+                 :with dots = 0
+                 :for over-duration =  head-duration :then (/ over-duration 2)
+                 :for over =  (-  duration over-duration) :then (- over over-duration)
+                 :while (and (< dots 3) (plusp over))
+                 :do (incf dots)
+                 :finally (return-from quantized-duration (values head beams dots))))))
+
+(defmethod quantized-duration ((note midi-note) &optional (timings (timings note)))
+  (quantized-duration (duration note) timings))
 
 
 (defmethod note-on ((note midi-note) event time)
@@ -442,31 +460,18 @@ specified by the midi EVENT.
 ;;; gsharp-buffer-output
 ;;;
 
-(defun prepare-buffer (filepath staves)
-  (let* ((buffer   (make-instance 'buffer
-                       :min-width 12
-                       :spacing-style 1.0
-                       :right-edge 700
-                       :left-offset 30
-                       :left-margin 20))
-         (layer    (make-layer staves))
-         (segments (list (make-instance 'segment
-                             :buffer buffer
-                             :layers (list layer)))))
-    (setf (staves   buffer) staves
-          (segments buffer)  segments
-          (filepath buffer) filepath
-          (needs-saving buffer) t)
-    buffer))
 
 (defclass gsharp-buffer-output ()
   ((buffer :initarg :buffer :reader buffer)
-   (cursor :reader cursor)))
+   (cursor :reader cursor)
+   (last-timings :initform nil :accessor last-timings)))
 
 (defmethod initialize-instance ((self gsharp-buffer-output) &key filepath &allow-other-keys)
   (call-next-method)
   (unless (and (slot-boundp self 'buffer) (slot-value self 'buffer))
-    (setf (slot-value self 'buffer) (prepare-buffer filepath (gsharp::staves/treble15ma+treble+bass+bass15mb))))
+    (setf (slot-value self 'buffer)
+          (let ((gsharp::*default-staves-function* 'gsharp::staves/treble15ma+treble+bass+bass15mb))
+            (gsharp::create-file-buffer (or filepath "untitled")))))
   (setf (slot-value self 'cursor) (gsharp::make-initial-cursor (slot-value self 'buffer)))
   self)
 
@@ -497,6 +502,25 @@ specified by the midi EVENT.
     (add-note cluster note)))
 
 
+
+(defun select-staff (staves key)
+  (loop
+    :with selected-staf
+    :with sorted-staves = (sort (mapcar (lambda (staf)
+                                          (cons staf
+                                                (cdr (assoc (name (clef staf))
+                                                            '((:bass15mb   . 24)
+                                                              (:bass       . 49)
+                                                              (:treble     . 72)
+                                                              (:treble15ma . 95)))))) staves)
+                                (function <)
+                                :key (function cdr))
+    :for (staf . low) :in sorted-staves
+    :do (setf selected-staf staf)
+    :while (< key low)
+    :finally (return selected-staf)))
+
+
 ;; (define-microtonal-accidentals :double-flat :sesquiflat :flat :semiflat
 ;;                                :natural 
 ;;                                :semisharp :sharp :sesquisharp :double-sharp)
@@ -504,7 +528,8 @@ specified by the midi EVENT.
 ;; (define-accidentals :double-flat :flat :natural :sharp :double-sharp)
 
 (defmethod output-note ((output gsharp-buffer-output) (note midi-note))
-  (with-slots (buffer) output
+  (with-slots (buffer last-timings) output
+    (setf last-timings (timings note))
     (multiple-value-bind (head beams dots) (quantized-duration note)
       (let* ((cluster (insert-cluster output
                                       :notehead head
@@ -512,17 +537,20 @@ specified by the midi EVENT.
                                       :rbeams beams))
              (staff   (car (staves (layer (slice (bar cluster))))))
              (note    (make-note  (key note)
-                                  (select-staf (staves buffer) (key note))
-                                  :head        head
-                                  :accidentals (accidentals note)
-                                  :dots        dots)))
+                                  (select-staff (staves buffer) (key note))
+                                  :head         head
+                                  :accidentals  (accidentals note)
+                                  :dots         dots)))
         (add-note cluster note)))))
 
+
 (defmethod output-silence ((output gsharp-buffer-output) duration)
-  (with-slots (buffer) output
-
-    ))
-
+  (with-slots (buffer last-timings) output
+    (multiple-value-bind (head beams dots) (quantized-duration duration last-timings)
+      (insert-cluster output
+                      :notehead head
+                      :dots dots
+                      :rbeams beams))))
 
 
 (defun read-midi-track (track output)
@@ -556,6 +584,50 @@ TODO: Select what to do with the channels: select one or more of them to be merg
 #-(and)
 (dolist (event (first (second *file*)))
   (process-event *state* event))
+
+
+(defun test/gsharp-buffer-output ()
+  (let ((timings (make-instance 'timings)))
+    (flet ((note (key duration &optional (velocity 64))
+             (let ((note  (make-instance 'midi-note :key key :timings timings)))
+               (setf (initial-velocity note) velocity
+                     (current-velocity note) velocity
+                     (note-on-time note) 0
+                     (note-off-time note) duration)
+               note)))
+      (let ((buffer (make-instance 'gsharp-buffer-output)))
+
+        (output-note buffer (note 29 0.25))
+        (output-note buffer (note 35 0.25))
+        (output-note buffer (note 33 0.25))
+        (output-note buffer (note 37 0.50))
+
+        ;; (output-silence buffer 0.50)
+        
+        (output-note buffer (note 63 0.25))
+        (output-note buffer (note 65 0.25))
+        (output-note buffer (note 69 0.25))
+        (output-note buffer (note 67 0.50))
+
+        ;; (output-silence buffer 0.50)
+
+        (output-note buffer (note 77 0.25))
+        (output-note buffer (note 81 0.25))
+        (output-note buffer (note 79 0.25))
+        (output-note buffer (note 83 0.50))
+
+        ;; (output-silence buffer 0.50)
+
+        (output-note buffer (note 101 0.25))
+        (output-note buffer (note 105 0.25))
+        (output-note buffer (note 103 0.25))
+        (output-note buffer (note 107 0.50))
+        
+        buffer))))
+
+
+;; (gsharp::in-gsharp
+;;  (test/gsharp-buffer-output))
 
 
 #-(and)

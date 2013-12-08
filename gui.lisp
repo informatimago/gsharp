@@ -1,5 +1,7 @@
 (in-package :gsharp)
 
+(defgeneric add-buffer (application-frame buffer))
+
 (defparameter *icon-path*
   ;;  sb-ext:*core-pathname*
   "/Users/dlewis/lisp/gsharp/Icons/")
@@ -30,9 +32,9 @@
 
 (defmethod print-object ((view orchestra-view) stream)
   (print-unreadable-object (view stream :type t :identity nil)
-    (format stream "~S" (file-namestring (or (filepath (buffer view)) ""))))
-  ;; (print-unreadable-object (view stream :type t :identity t)
-  ;;   (prin1 (list :filepath (filepath (buffer view))) stream))
+    (format stream "~S"
+            (or (esa-utils::name (buffer view))
+                (file-namestring (or (filepath (buffer view)) "untitled")))))
   view)
 
 ;;; FIXME: we need to sort out Drei's definition of accept methods for
@@ -392,19 +394,20 @@
     (setf (input-state *application-frame*) input-state
           (staves (car (layers (car (segments buffer))))) (list staff))))
 
-(defmethod frame-find-file :around ((application-frame gsharp) filepath)
-  (declare (ignore filepath))
-  (let* ((buffer (call-next-method))
-         (input-state (make-input-state))
+(defmethod add-buffer ((application-frame gsharp) buffer)
+  (let* ((input-state (make-input-state))
          (cursor (make-initial-cursor buffer))
          (view (make-instance 'orchestra-view 
-                              :buffer buffer
-                              :cursor cursor)))
+                   :buffer buffer
+                   :cursor cursor)))
     (push view (views *application-frame*))
     (setf (view (car (windows *application-frame*))) view
-          (input-state *application-frame*) input-state
-          (filepath buffer) filepath)
+          (input-state *application-frame*) input-state)
     (select-layer cursor (car (layers (segment (current-cursor)))))))
+
+(defmethod frame-find-file :around ((application-frame gsharp) filepath)
+  (declare (ignore filepath))
+  (add-buffer application-frame (call-next-method)))
 
 (define-gsharp-command (com-quit :name t) ()
   (frame-exit *application-frame*))
@@ -1744,7 +1747,8 @@ Prints the results in the minibuffer."
 (defmethod frame-make-buffer-from-stream ((frame gsharp) stream)
   (if (midi-stream-p stream)
       (read-buffer-from-midi-stream stream)
-      (read-buffer-from-stream stream)))
+      (read-buffer-from-stream stream))
+  (display-message "Loaded ~A" (pathname stream)))
 
 (defmethod frame-make-new-buffer ((frame gsharp) &key &allow-other-keys)
   (make-instance 'buffer))
