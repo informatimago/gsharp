@@ -2,3 +2,12 @@
 *~
 *.orig
 *.rej
+*.aux
+*.bbl
+*.blg
+*.dvi
+*.idx
+*.ilg
+*.ind
+*.log
+*.toc
